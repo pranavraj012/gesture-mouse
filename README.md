@@ -1,8 +1,7 @@
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
-[![MediaPipe](https://img.shields.io/badge/mediapipe-0.10.33-blue.svg)](https://github.com/google/mediapipe)
-[![OpenCV](https://img.shields.io/badge/opencv-4.11.0-blue.svg)](https://opencv.org)
-[![NumPy](https://img.shields.io/badge/numpy-1.23.3-blue.svg)](https://numpy.org)
-[![PyAutoGUI](https://img.shields.io/badge/pyautogui-0.9.53-blue.svg)](https://pyautogui.readthedocs.io/)
+[![MediaPipe](https://img.shields.io/badge/mediapipe-blue.svg)](https://github.com/google/mediapipe)
+[![OpenCV](https://img.shields.io/badge/opencv-blue.svg)](https://opencv.org)
+[![PyAutoGUI](https://img.shields.io/badge/pyautogui-blue.svg)](https://pyautogui.readthedocs.io/)
 
 # gesture-mouse
 
