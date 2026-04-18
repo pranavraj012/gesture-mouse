@@ -6,7 +6,7 @@ Gestures:
   • Double pinch           → Double-click
     • Middle+Thumb pinch-hold→ Right-click
   • Index+Middle+Ring pinch→ Middle-click
-  • V-pose (index+middle)  → Scroll: vertical (centroid-Y) + horizontal (centroid-X)
+    • V-pose (index+middle)  → Scroll: vertical (centroid-Y) + horizontal (centroid-X)
     • 3-finger hold          → Pause/resume tracking toggle
     • Middle+Thumb scroll    → Legacy delta-Y scroll (kept as fallback)
 
@@ -15,7 +15,7 @@ Improvements over v1:
   • Click cooldown (300 ms) — prevents accidental double-fires
   • Intentional double-click via two quick pinches
   • Scroll direction lock (300 ms) for V-pose
-  • Horizontal scroll via hscroll() in V-pose
+    • Horizontal scroll via hscroll() in V-pose
     • Right-click via middle+thumb hold (with motion guard)
   • Middle-click via three-finger pinch
     • 3-finger hold = pause tracking
@@ -139,9 +139,9 @@ DEFAULT_CONFIG = {
 
     # Gesture history buffer
     # NOTE: clicks use raw threshold (no buffer) for instant response.
-    # Buffer is only used for fist/v-pose/middle-pinch to debounce those.
+    # Buffer is only used for pause/v-pose/middle-pinch to debounce those.
     "history_frames": 6,          # rolling window size
-    "history_min_votes": 4,       # votes needed to confirm slow gestures (fist, V, middle)
+    "history_min_votes": 4,       # votes needed to confirm slow gestures (pause, V, middle)
 
     # Stabilization after drag
     "stabilize_duration": 0.20,
@@ -149,9 +149,6 @@ DEFAULT_CONFIG = {
     # Finger extension heuristic
     # Lower threshold makes extension detection (pinky/index) easier
     "extension_threshold": 0.16,
-
-    # Fist detection: all tips close to palm
-    "fist_threshold": 0.30,       # max ratio of hand_size for each tip-to-wrist dist
 
     # Two-hand zoom (touch index fingertips, then move vertically)
     "zoom_touch_threshold": 0.22,  # normalized tip-to-tip distance to enter zoom mode
@@ -455,13 +452,6 @@ def lm_dist(a, b):
 
 def is_extended(lms, tip_idx, pip_idx, hand_size):
     return lm_dist(lms[tip_idx], lms[pip_idx]) > hand_size * CONFIG["extension_threshold"]
-
-def is_fist(lms, hand_size):
-    """All four fingertips are close to the palm (wrist)."""
-    tips = [HandLandmark.INDEX_FINGER_TIP, HandLandmark.MIDDLE_FINGER_TIP,
-            HandLandmark.RING_FINGER_TIP, HandLandmark.PINKY_TIP]
-    wrist = lms[HandLandmark.WRIST]
-    return all(lm_dist(lms[t], wrist) < hand_size * CONFIG["fist_threshold"] for t in tips)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Gesture history buffer — majority-vote smoother
@@ -1032,7 +1022,7 @@ try:
             # ─────────────────────────────────────────────────────────────
             # CLICK / DRAG / RIGHT-CLICK all use RAW distance thresholds
             # (same as the original code) so they feel instant with zero lag.
-            # Only fist + V-pose use the gesture buffer to debounce.
+            # Only pause + V-pose use the gesture buffer to debounce.
             # ─────────────────────────────────────────────────────────────
 
             # ── Three-finger middle-click (raw) ────────────────────────────
@@ -1199,7 +1189,6 @@ try:
                 and (not three_pinch_raw)
                 and (not back_pinch_raw)
                 and (not v_pose_raw)
-                and (not fist_raw)
             )
 
             if enter_pinch_raw and enter_allowed and now >= enter_cooldown_until:
@@ -1251,7 +1240,6 @@ try:
             back_triggered = False
             enter_pinch_active = False
             previous_y_scroll = None
-            fist_prev = False
             gesture_buf.buf.clear()
             movement_thread.deactivate()
 
