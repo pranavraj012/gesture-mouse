@@ -12,6 +12,7 @@ Control your mouse cursor using hand gestures and a webcam. `hand_track.py` uses
 - Click and drag detection using fingertip proximity
 - Smooth scrolling (V-pose and thumb-based)
 - Real-time, multithreaded processing with adjustable sensitivity
+- Optional handwriting mode with a floating drawing panel (always-on-top) and gesture controls
 
 ## Supported gestures
 
@@ -19,6 +20,9 @@ Control your mouse cursor using hand gestures and a webcam. `hand_track.py` uses
 - **Left click / Drag — Index + Thumb pinch**: Briefly pinch your index fingertip to your thumb to perform a left click. Hold the pinch for ~0.25s to start a drag (mouse down); release to drop (mouse up).
 - **Right click / Pinch scroll — Middle + Thumb pinch**: Pinch your middle fingertip to your thumb to enter right-pinch mode. Holding for ~0.18s triggers a right-click; while pinched, vertical movement of the middle finger performs scrolling.
 - **V-pose scrolling — Index + Middle extended**: Extend the index and middle fingers while curling the ring and pinky (a "V" shape). Tilt the V up/down relative to the wrist to perform smooth orientation-based scrolling.
+- **Back navigation — Thumb + Pinky pinch-hold**: Hold thumb and pinky pinch to trigger app/browser back action.
+- **Enter key (normal mode) — Ring + Thumb pinch-hold**: With one hand visible and handwriting mode off, hold ring+thumb pinch to send Enter (useful for Google/YouTube search submit).
+- **Handwriting mode (optional) — Two-hand ring+thumb hold**: Enable this first in `config.toml` (`handwriting_enabled = true`). With two hands visible, hold ring+thumb pinch on the left-side hand to toggle handwriting mode on/off. In handwriting mode, a floating handwriting window pops up (can stay on top while you are in another app) and shows a live pen cursor/crosshair so writing is easier to track. Use right-side hand index+thumb pinch as pen-down to draw, mapped to the floating panel. Left-side hand gestures: index+thumb hold to submit text, middle+thumb hold to clear, pinky+thumb hold to send backspace.
 - **Notes & tuning**: Gesture detection uses adaptive, size-normalized thresholds and hold times (`touch_threshold`, `drag_hold`, `right_click_hold`) from `config.toml`. If gestures are unreliable, improve lighting, keep your hand centered, or tweak these values in the config.
 
 ## Requirements
@@ -66,6 +70,22 @@ python hand_track.py
 * Change the camera index in `hand_track.py` (`cv2.VideoCapture`) if you have multiple cameras.
 
 Example values you can tune in `config.toml` include `v_scroll_sensitivity`, `v_orientation_gain`, `cursor_move_alpha_scale`, and `cursor_jitter_threshold`.
+
+For handwriting feel tuning, use `handwriting_pen_threshold_scale` (higher = easier pen-down), `handwriting_jitter_threshold` (higher = more jitter filtering), `handwriting_move_alpha_floor/ceiling/scale` (higher = more responsive pen movement), and `handwriting_pen_release_grace` (higher = fewer broken strokes during brief pinch loss).
+
+Handwriting is disabled by default (`handwriting_enabled = false`) to avoid accidental trigger for users who only want mouse gestures.
+
+OCR note: Tesseract is lightweight and good for clean print-like writing, but cursive handwriting can still be inconsistent. This project now uses multi-pass preprocessing (upscale + adaptive/otsu + best-candidate scoring) to improve Tesseract results. If you still need better cursive recognition, a dedicated handwritten-text OCR model (for example TrOCR/EasyOCR/PaddleOCR) is usually a better fit than a generic VLM.
+
+Right-click note: the normal-mode middle+thumb right-click now supports immediate handoff after text drag selection (it auto-releases drag grace), so context-menu actions on selected text are more reliable.
+
+For OCR text insertion in handwriting mode, install the optional dependencies:
+
+```powershell
+python -m pip install pytesseract
+```
+
+and install the Tesseract engine on your system. If these are not installed, handwriting mode still works for drawing/clearing/toggling but submit will show an OCR-unavailable message.
 
 ## Contributing
 

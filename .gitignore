@@ -28,6 +28,7 @@ htmlcov/
 
 # Environments
 .env
+.env.*
 .venv/
 env/
 venv/
@@ -42,6 +43,18 @@ Thumbs.db
 
 # Logs and local files
 *.log
+*.tmp
+*.temp
+*.bak
+*.swp
+
+# Python/type checker/linter caches
+.mypy_cache/
+.ruff_cache/
+.pyre/
+
+# Local runtime caches
+.cache/
 
 # Ignore the MediaPipe hand landmarker model
 hand_landmarker.task

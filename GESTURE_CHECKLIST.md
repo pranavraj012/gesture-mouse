@@ -23,6 +23,16 @@ python hand_track.py
 
 - [ ] Zoom mode: touch both index fingertips, move up for zoom in and down for zoom out.
 - [ ] Pause/resume: make fist to pause, fist again to resume tracking.
+- [ ] Enter key (normal mode): with handwriting mode OFF and one hand visible, ring+thumb pinch-hold (~0.22s) sends Enter.
+
+## Handwriting mode checks (optional: set handwriting_enabled = true)
+
+- [ ] Toggle handwriting mode: with two hands visible, ring+thumb hold on left-side hand turns mode on/off.
+- [ ] Draw: right-side index+thumb pinch draws in floating handwriting panel.
+- [ ] Clear: left-side middle+thumb hold clears panel.
+- [ ] Submit: left-side index+thumb hold inserts recognized text (if OCR installed).
+- [ ] Backspace: left-side pinky+thumb hold deletes one character.
+- [ ] Exit: left-side ring+thumb hold toggles handwriting mode off.
 
 ## Regression checks
 
