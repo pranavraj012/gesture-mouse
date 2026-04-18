@@ -16,7 +16,6 @@ python hand_track.py
 
 ## Scrolling checks
 
-- [ ] Scroll (middle+thumb): while pinched, move middle finger up/down and verify speed.
 - [ ] Scroll (V-pose): show V-pose and tilt/shift to verify vertical and horizontal scroll.
 
 ## Zoom and state checks
