@@ -45,3 +45,6 @@ Thumbs.db
 
 # Ignore the MediaPipe hand landmarker model
 hand_landmarker.task
+
+# Local reference script (not part of final published app)
+hand_track_reference.py

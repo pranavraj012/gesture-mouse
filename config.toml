@@ -1,0 +1,59 @@
+# gesture-mouse tuning
+# Edit these values to customize gestures, scrolling, cursor motion, and zoom.
+
+[camera]
+width = 640
+height = 480
+fps = 60
+
+[mapping]
+inner_area_percent = 0.70
+
+[gestures]
+touch_threshold = 0.19
+three_finger_threshold = 0.22
+drag_hold = 0.25
+drag_release_grace = 0.18
+click_cooldown = 0.30
+double_click_window = 0.40
+right_click_hold = 0.18
+right_click_suppress_after_middle_click = 0.25
+extension_threshold = 0.16
+fist_threshold = 0.30
+
+[scroll]
+v_orientation_threshold = 0.01
+v_orientation_gain = 160.0
+v_orientation_scroll = 6.0
+v_h_gain = 160.0
+v_h_scroll = 6.0
+scroll_lock_duration = 0.30
+scroll_threshold = 0.001
+v_scroll_sensitivity = 360.0
+max_scroll_step = 32
+v_scroll_multiplier = 2.35
+
+[movement]
+cursor_jitter_threshold = 0.0022
+cursor_drag_alpha_floor = 0.25
+cursor_drag_alpha_ceiling = 0.85
+cursor_drag_alpha_scale = 3.0
+cursor_drag_sleep = 0.008
+cursor_move_alpha_floor = 0.12
+cursor_move_alpha_ceiling = 0.62
+cursor_move_alpha_scale = 2.6
+cursor_move_sleep = 0.006
+
+[history]
+history_frames = 6
+history_min_votes = 4
+
+[stabilization]
+stabilize_duration = 0.20
+
+[zoom]
+zoom_touch_threshold = 0.22
+zoom_motion_threshold = 0.004
+zoom_scroll_gain = 320.0
+zoom_scroll_cap = 10
+zoom_cooldown = 0.05

@@ -19,7 +19,7 @@ Control your mouse cursor using hand gestures and a webcam. `hand_track.py` uses
 - **Left click / Drag — Index + Thumb pinch**: Briefly pinch your index fingertip to your thumb to perform a left click. Hold the pinch for ~0.25s to start a drag (mouse down); release to drop (mouse up).
 - **Right click / Pinch scroll — Middle + Thumb pinch**: Pinch your middle fingertip to your thumb to enter right-pinch mode. Holding for ~0.18s triggers a right-click; while pinched, vertical movement of the middle finger performs scrolling.
 - **V-pose scrolling — Index + Middle extended**: Extend the index and middle fingers while curling the ring and pinky (a "V" shape). Tilt the V up/down relative to the wrist to perform smooth orientation-based scrolling.
-- **Notes & tuning**: Gesture detection uses adaptive, size-normalized thresholds and hold times (`touch_threshold`, `drag_hold`, `right_click_hold`) defined in `hand_track.py`. If gestures are unreliable, improve lighting, keep your hand centered, or tweak these values in the script.
+- **Notes & tuning**: Gesture detection uses adaptive, size-normalized thresholds and hold times (`touch_threshold`, `drag_hold`, `right_click_hold`) from `config.toml`. If gestures are unreliable, improve lighting, keep your hand centered, or tweak these values in the config.
 
 ## Requirements
 - Python 3.10 or newer (3.10 recommended)
@@ -61,8 +61,11 @@ python hand_track.py
 
 ## Configuration
 
+* Edit `config.toml` to tweak gesture thresholds, scroll speed, cursor movement responsiveness, zoom behavior, camera size, and timing values.
+* `hand_track.py` loads `config.toml` automatically and falls back to built-in defaults if the file is missing.
 * Change the camera index in `hand_track.py` (`cv2.VideoCapture`) if you have multiple cameras.
-* Tweak thresholds such as `touch_threshold`, detection confidence, and model complexity directly in the script for your setup.
+
+Example values you can tune in `config.toml` include `v_scroll_sensitivity`, `v_orientation_gain`, `cursor_move_alpha_scale`, and `cursor_jitter_threshold`.
 
 ## Contributing
 
