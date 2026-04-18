@@ -64,3 +64,9 @@ hand_track_reference.py
 
 # Local planning notes
 HANDWRITING_MODE_PLAN.md
+
+# Local gesture calibration assets
+reference-stop-image.png
+reference-*.png
+pose_calibration_output.json
+pose_calibration_output*.json

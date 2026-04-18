@@ -80,9 +80,12 @@ DEFAULT_CONFIG = {
     "enter_gesture_hold": 0.22,
     "enter_gesture_cooldown": 0.80,
 
-    # Pause / resume gesture (single-hand 3-finger extension hold)
+    # Pause / resume gesture (single-hand rock-star pose hold)
     "pause_hold": 0.40,
     "pause_cooldown": 0.70,
+    "pause_open_ratio": 1.12,
+    "pause_closed_ratio": 1.03,
+    "pause_thumb_open_ratio": 1.05,
 
     # Handwriting mode
     "handwriting_enabled": False,
@@ -631,6 +634,7 @@ previous_y_scroll = None
 tracking_paused = False
 pause_hold_active = False
 pause_hold_start = 0.0
+pause_hold_latch = False
 pause_cooldown_until = 0.0
 
 # Two-hand zoom
@@ -695,6 +699,11 @@ try:
             ring_tip     = lms[HandLandmark.RING_FINGER_TIP]
             pinky_tip    = lms[HandLandmark.PINKY_TIP]
             thumb_tip    = lms[HandLandmark.THUMB_TIP]
+            index_pip    = lms[HandLandmark.INDEX_FINGER_PIP]
+            middle_pip   = lms[HandLandmark.MIDDLE_FINGER_PIP]
+            ring_pip     = lms[HandLandmark.RING_FINGER_PIP]
+            pinky_pip    = lms[HandLandmark.PINKY_PIP]
+            thumb_ip     = lms[HandLandmark.THUMB_IP]
             ring_mcp     = lms[HandLandmark.RING_FINGER_MCP]
 
             hand_size = lm_dist(wrist, middle_tip)
@@ -955,6 +964,15 @@ try:
             mid_ext   = is_extended(lms, HandLandmark.MIDDLE_FINGER_TIP, HandLandmark.MIDDLE_FINGER_PIP, hand_size)
             ring_ext  = is_extended(lms, HandLandmark.RING_FINGER_TIP,   HandLandmark.RING_FINGER_PIP,   hand_size)
             pinky_ext = is_extended(lms, HandLandmark.PINKY_TIP,         HandLandmark.PINKY_PIP,         hand_size)
+            pause_open_ratio = float(CONFIG["pause_open_ratio"])
+            pause_closed_ratio = float(CONFIG["pause_closed_ratio"])
+            pause_thumb_open_ratio = float(CONFIG["pause_thumb_open_ratio"])
+
+            pause_thumb_open = lm_dist(thumb_tip, wrist) > (lm_dist(thumb_ip, wrist) * pause_thumb_open_ratio)
+            pause_idx_open = lm_dist(index_tip, wrist) > (lm_dist(index_pip, wrist) * pause_open_ratio)
+            pause_pinky_open = lm_dist(pinky_tip, wrist) > (lm_dist(pinky_pip, wrist) * pause_open_ratio)
+            pause_mid_closed = lm_dist(middle_tip, wrist) < (lm_dist(middle_pip, wrist) * pause_closed_ratio)
+            pause_ring_closed = lm_dist(ring_tip, wrist) < (lm_dist(ring_pip, wrist) * pause_closed_ratio)
 
             # ── Gesture label for this frame ───────────────────────────────
             idx_thr_d  = lm_dist(index_tip, thumb_tip)
@@ -967,7 +985,14 @@ try:
             three_pinch_raw = (idx_thr_d < three_thr and mid_thr_d < three_thr and ring_thr_d < three_thr)
             back_pinch_raw = pinky_thr_d < (CONFIG["back_gesture_threshold"] * hand_size)
             v_pose_raw      = idx_ext and mid_ext and not ring_ext and not pinky_ext
-            pause_raw       = idx_ext and mid_ext and ring_ext and not pinky_ext
+            pause_raw       = (
+                pause_thumb_open
+                and pause_idx_open
+                and pause_pinky_open
+                and pause_mid_closed
+                and pause_ring_closed
+                and (not back_pinch_raw)
+            )
 
             if pause_raw:
                 frame_label = "pause_hold"
@@ -984,21 +1009,24 @@ try:
 
             gesture_buf.push(frame_label)
 
-            # ── Pause toggle (deliberate 3-finger hold) ───────────────────
-            if pause_raw and now >= pause_cooldown_until:
+            # ── Pause toggle (deliberate rock-star hold) ──────────────────
+            if pause_raw and not pause_hold_latch and now >= pause_cooldown_until:
                 if not pause_hold_active:
                     pause_hold_active = True
                     pause_hold_start = now
                 elif (now - pause_hold_start) >= CONFIG["pause_hold"]:
                     tracking_paused = not tracking_paused
                     pause_cooldown_until = now + CONFIG["pause_cooldown"]
+                    pause_hold_latch = True
                     pause_hold_active = False
                     print(f"[handTrack] tracking {'PAUSED' if tracking_paused else 'RESUMED'}")
             else:
-                pause_hold_active = False
+                if not pause_raw:
+                    pause_hold_active = False
+                    pause_hold_latch = False
 
             if tracking_paused:
-                cv2.putText(frame, "PAUSED (3-finger hold to resume)", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 255), 2)
+                cv2.putText(frame, "PAUSED (rock-star hold to resume)", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 255), 2)
                 cv2.imshow("HandTrack", frame)
                 if cv2.waitKey(1) & 0xFF == 27:
                     break
@@ -1160,7 +1188,13 @@ try:
                 v_scroll_lock_axis = None
 
             # ── Back navigation: thumb+pinky pinch-hold ───────────────────
-            back_allowed = (not left_pinch_raw) and (not mid_pinch_raw) and (not three_pinch_raw) and (not v_pose_raw)
+            back_allowed = (
+                (not left_pinch_raw)
+                and (not mid_pinch_raw)
+                and (not three_pinch_raw)
+                and (not v_pose_raw)
+                and (not pause_raw)
+            )
             if back_pinch_raw and back_allowed and now >= back_cooldown_until:
                 if not back_pinch_active:
                     back_pinch_active = True
@@ -1240,6 +1274,8 @@ try:
             back_triggered = False
             enter_pinch_active = False
             previous_y_scroll = None
+            pause_hold_active = False
+            pause_hold_latch = False
             gesture_buf.buf.clear()
             movement_thread.deactivate()
 
