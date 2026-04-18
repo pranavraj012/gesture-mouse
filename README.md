@@ -77,11 +77,7 @@ For handwriting feel tuning, use `handwriting_pen_threshold_scale` (higher = eas
 
 Handwriting is disabled by default (`handwriting_enabled = false`) to avoid accidental trigger for users who only want mouse gestures.
 
-OCR note: Tesseract is lightweight and good for clean print-like writing, but cursive handwriting can still be inconsistent. This project now uses multi-pass preprocessing (upscale + adaptive/otsu + best-candidate scoring) to improve Tesseract results. If you still need better cursive recognition, a dedicated handwritten-text OCR model (for example TrOCR/EasyOCR/PaddleOCR) is usually a better fit than a generic VLM.
-
-Right-click note: the normal-mode middle+thumb right-click now supports immediate handoff after text drag selection (it auto-releases drag grace), so context-menu actions on selected text are more reliable.
-
-For OCR text insertion in handwriting mode, install the optional dependencies:
+If you enable handwriting mode, install the optional OCR dependencies:
 
 ```powershell
 python -m pip install pytesseract
