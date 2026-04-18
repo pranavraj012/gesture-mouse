@@ -48,3 +48,6 @@ hand_landmarker.task
 
 # Local reference script (not part of final published app)
 hand_track_reference.py
+
+# Local planning notes
+HANDWRITING_MODE_PLAN.md

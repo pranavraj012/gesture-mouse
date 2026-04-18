@@ -18,6 +18,10 @@ click_cooldown = 0.30
 double_click_window = 0.40
 right_click_hold = 0.18
 right_click_suppress_after_middle_click = 0.25
+back_gesture_threshold = 0.20
+back_gesture_hold = 0.20
+back_gesture_cooldown = 0.70
+back_action = "alt_left"
 extension_threshold = 0.16
 fist_threshold = 0.30
 

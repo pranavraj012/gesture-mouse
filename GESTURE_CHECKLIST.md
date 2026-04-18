@@ -13,6 +13,7 @@ python hand_track.py
 - [ ] Drag: hold index+thumb pinch for drag, release to drop.
 - [ ] Right click: hold middle+thumb pinch long enough to right-click.
 - [ ] Middle click: three-finger pinch (index+middle+ring) triggers middle click only.
+- [ ] Back action: thumb+pinky pinch-hold triggers app/browser back navigation.
 
 ## Scrolling checks
 

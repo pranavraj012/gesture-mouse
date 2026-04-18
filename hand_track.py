@@ -64,6 +64,12 @@ DEFAULT_CONFIG = {
     # Right-click (middle+thumb hold)
     "right_click_hold": 0.18,     # hold time to fire right-click
 
+    # Back navigation gesture (thumb+pinky pinch-hold)
+    "back_gesture_threshold": 0.20,
+    "back_gesture_hold": 0.20,
+    "back_gesture_cooldown": 0.70,
+    "back_action": "alt_left",  # alt_left | x1
+
     # Scroll (V-pose orientation)
     "v_orientation_threshold": 0.01,
     "v_orientation_gain": 160.0,   # slightly faster V-pose scroll
@@ -165,6 +171,18 @@ def load_config(config_path):
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.toml")
 CONFIG = load_config(CONFIG_PATH)
+
+
+def trigger_back_action():
+    action = str(CONFIG.get("back_action", "alt_left")).strip().lower()
+    if action == "x1":
+        try:
+            pyautogui.click(button="x1")
+            return
+        except Exception:
+            pass
+    # Fallback and default behavior for broad app support
+    pyautogui.hotkey("alt", "left")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # MediaPipe model download / setup
@@ -385,6 +403,12 @@ right_pinch_active = False
 right_pinch_start = 0.0
 right_clicked = False
 
+# Back gesture (thumb+pinky pinch-hold)
+back_pinch_active = False
+back_pinch_start = 0.0
+back_triggered = False
+back_cooldown_until = 0.0
+
 # Middle-click (3-finger pinch)
 mid_click_cooldown = 0.0
 right_click_suppress_until = 0.0
@@ -502,10 +526,12 @@ try:
             idx_thr_d  = lm_dist(index_tip, thumb_tip)
             mid_thr_d  = lm_dist(middle_tip, thumb_tip)
             ring_thr_d = lm_dist(ring_tip, thumb_tip)
+            pinky_thr_d = lm_dist(pinky_tip, thumb_tip)
 
             left_pinch_raw  = idx_thr_d < adaptive_thr
             mid_pinch_raw   = mid_thr_d < adaptive_thr and not left_pinch_raw
             three_pinch_raw = (idx_thr_d < three_thr and mid_thr_d < three_thr and ring_thr_d < three_thr)
+            back_pinch_raw = pinky_thr_d < (CONFIG["back_gesture_threshold"] * hand_size)
             v_pose_raw      = idx_ext and mid_ext and not ring_ext and not pinky_ext
             fist_raw        = is_fist(lms, hand_size)
 
@@ -678,12 +704,32 @@ try:
                 previous_y_scroll = None
                 v_scroll_lock_axis = None
 
+            # ── Back navigation: thumb+pinky pinch-hold ───────────────────
+            back_allowed = (not left_pinch_raw) and (not mid_pinch_raw) and (not three_pinch_raw) and (not v_pose_raw)
+            if back_pinch_raw and back_allowed and now >= back_cooldown_until:
+                if not back_pinch_active:
+                    back_pinch_active = True
+                    back_pinch_start = now
+                    back_triggered = False
+                elif (not back_triggered) and ((now - back_pinch_start) >= CONFIG["back_gesture_hold"]):
+                    try:
+                        trigger_back_action()
+                        print("[handTrack] back action")
+                    except Exception as exc:
+                        print(f"[handTrack] back action failed: {exc}")
+                    back_triggered = True
+                    back_cooldown_until = now + CONFIG["back_gesture_cooldown"]
+            else:
+                back_pinch_active = False
+                back_triggered = False
+
             # ── Debug overlay ──────────────────────────────────────────────
             dominant = gesture_buf.dominant()
             status = (
                 f"Gesture:{dominant}  "
                 f"Drag:{'Y' if left_is_dragging else 'N'}  "
-                f"Paused:{'Y' if tracking_paused else 'N'}"
+                f"Paused:{'Y' if tracking_paused else 'N'}  "
+                f"Back:{'Y' if back_pinch_active else 'N'}"
             )
             v_acc = scroll_thread.v_accumulator
             h_acc = scroll_thread.h_accumulator
@@ -706,6 +752,8 @@ try:
                 right_pinch_active = False
                 right_clicked = False
                 right_pinch_start = 0.0
+            back_pinch_active = False
+            back_triggered = False
             previous_y_scroll = None
             fist_prev = False
             gesture_buf.buf.clear()
