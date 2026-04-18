@@ -12,9 +12,11 @@ Control your mouse cursor using hand gestures and a webcam. `hand_track.py` uses
 - Click and drag detection using fingertip proximity
 - Smooth scrolling (V-pose and thumb-based)
 - Real-time, multithreaded processing with adjustable sensitivity
-- Optional handwriting mode with a floating drawing panel (always-on-top) and gesture controls
+- Optional handwriting mode with a floating drawing panel (always-on-top) and gesture controls; it is disabled by default and can be enabled in `config.toml`
 
-## Supported gestures
+## Supported Gestures
+
+Below is the quick reference for what each gesture does.
 
 - **Cursor move**: Move your hand to move the cursor. The script tracks the ring-finger base and maps it to screen coordinates using absolute mapping.
 - **Left click / Drag — Index + Thumb pinch**: Briefly pinch your index fingertip to your thumb to perform a left click. Hold the pinch for ~0.25s to start a drag (mouse down); release to drop (mouse up).
