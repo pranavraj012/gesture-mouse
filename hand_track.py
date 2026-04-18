@@ -7,7 +7,7 @@ Gestures:
     • Middle+Thumb pinch-hold→ Right-click
   • Index+Middle+Ring pinch→ Middle-click
   • V-pose (index+middle)  → Scroll: vertical (centroid-Y) + horizontal (centroid-X)
-  • Fist                   → Pause/resume tracking toggle
+    • 3-finger hold          → Pause/resume tracking toggle
     • Middle+Thumb scroll    → Legacy delta-Y scroll (kept as fallback)
 
 Improvements over v1:
@@ -18,7 +18,7 @@ Improvements over v1:
   • Horizontal scroll via hscroll() in V-pose
     • Right-click via middle+thumb hold (with motion guard)
   • Middle-click via three-finger pinch
-  • Fist = pause tracking
+    • 3-finger hold = pause tracking
   • External YAML-style config dict (edit CONFIG below)
   • Fixed scroll_queue bug → shows accumulator in overlay
     • Two-hand zoom: Ctrl+wheel style zoom mapping
@@ -79,6 +79,10 @@ DEFAULT_CONFIG = {
     "enter_gesture_threshold_scale": 1.0,
     "enter_gesture_hold": 0.22,
     "enter_gesture_cooldown": 0.80,
+
+    # Pause / resume gesture (single-hand 3-finger extension hold)
+    "pause_hold": 0.40,
+    "pause_cooldown": 0.70,
 
     # Handwriting mode
     "handwriting_enabled": False,
@@ -633,9 +637,11 @@ v_scroll_lock_until = 0.0
 
 previous_y_scroll = None
 
-# Fist / pause
+# Pause / resume
 tracking_paused = False
-fist_prev = False              # debounce fist toggle
+pause_hold_active = False
+pause_hold_start = 0.0
+pause_cooldown_until = 0.0
 
 # Two-hand zoom
 zoom_active = False
@@ -971,10 +977,10 @@ try:
             three_pinch_raw = (idx_thr_d < three_thr and mid_thr_d < three_thr and ring_thr_d < three_thr)
             back_pinch_raw = pinky_thr_d < (CONFIG["back_gesture_threshold"] * hand_size)
             v_pose_raw      = idx_ext and mid_ext and not ring_ext and not pinky_ext
-            fist_raw        = is_fist(lms, hand_size)
+            pause_raw       = idx_ext and mid_ext and ring_ext and not pinky_ext
 
-            if fist_raw:
-                frame_label = "fist"
+            if pause_raw:
+                frame_label = "pause_hold"
             elif three_pinch_raw:
                 frame_label = "three_pinch"
             elif left_pinch_raw:
@@ -988,15 +994,21 @@ try:
 
             gesture_buf.push(frame_label)
 
-            # ── Fist toggle (debounced) ────────────────────────────────────
-            fist_confirmed = gesture_buf.confirmed("fist")
-            if fist_confirmed and not fist_prev:
-                tracking_paused = not tracking_paused
-                print(f"[handTrack] tracking {'PAUSED' if tracking_paused else 'RESUMED'}")
-            fist_prev = fist_confirmed
+            # ── Pause toggle (deliberate 3-finger hold) ───────────────────
+            if pause_raw and now >= pause_cooldown_until:
+                if not pause_hold_active:
+                    pause_hold_active = True
+                    pause_hold_start = now
+                elif (now - pause_hold_start) >= CONFIG["pause_hold"]:
+                    tracking_paused = not tracking_paused
+                    pause_cooldown_until = now + CONFIG["pause_cooldown"]
+                    pause_hold_active = False
+                    print(f"[handTrack] tracking {'PAUSED' if tracking_paused else 'RESUMED'}")
+            else:
+                pause_hold_active = False
 
             if tracking_paused:
-                cv2.putText(frame, "PAUSED (fist to resume)", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                cv2.putText(frame, "PAUSED (3-finger hold to resume)", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 255), 2)
                 cv2.imshow("HandTrack", frame)
                 if cv2.waitKey(1) & 0xFF == 27:
                     break

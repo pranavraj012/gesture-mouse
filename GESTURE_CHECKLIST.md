@@ -22,7 +22,7 @@ python hand_track.py
 ## Zoom and state checks
 
 - [ ] Zoom mode: touch both index fingertips, move up for zoom in and down for zoom out.
-- [ ] Pause/resume: make fist to pause, fist again to resume tracking.
+- [ ] Pause/resume: hold index + middle + ring extended for about 0.4s to pause, repeat to resume tracking.
 - [ ] Enter key (normal mode): with handwriting mode OFF and one hand visible, ring+thumb pinch-hold (~0.22s) sends Enter.
 
 ## Handwriting mode checks (optional: set handwriting_enabled = true)
