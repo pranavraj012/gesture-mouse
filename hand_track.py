@@ -7,7 +7,7 @@ Gestures:
     • Middle+Thumb pinch-hold→ Right-click
   • Index+Middle+Ring pinch→ Middle-click
   • V-pose (index+middle)  → Scroll: vertical (centroid-Y) + horizontal (centroid-X)
-  • Fist                   → Pause/resume tracking toggle
+    • 3-finger hold          → Pause/resume tracking toggle
     • Middle+Thumb scroll    → Legacy delta-Y scroll (kept as fallback)
 
 Improvements over v1:
@@ -18,7 +18,7 @@ Improvements over v1:
   • Horizontal scroll via hscroll() in V-pose
     • Right-click via middle+thumb hold (with motion guard)
   • Middle-click via three-finger pinch
-  • Fist = pause tracking
+    • 3-finger hold = pause tracking
   • External YAML-style config dict (edit CONFIG below)
   • Fixed scroll_queue bug → shows accumulator in overlay
     • Two-hand zoom: Ctrl+wheel style zoom mapping
@@ -36,6 +36,11 @@ import pyautogui
 import time
 import threading
 from collections import deque
+
+try:
+    import pytesseract
+except Exception:
+    pytesseract = None
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIG  — defaults are overridden by config.toml when present
@@ -63,6 +68,46 @@ DEFAULT_CONFIG = {
 
     # Right-click (middle+thumb hold)
     "right_click_hold": 0.18,     # hold time to fire right-click
+
+    # Back navigation gesture (thumb+pinky pinch-hold)
+    "back_gesture_threshold": 0.20,
+    "back_gesture_hold": 0.20,
+    "back_gesture_cooldown": 0.70,
+    "back_action": "alt_left",  # alt_left | x1
+
+    # Enter key gesture (normal mode, single-hand ring+thumb pinch-hold)
+    "enter_gesture_threshold_scale": 1.0,
+    "enter_gesture_hold": 0.22,
+    "enter_gesture_cooldown": 0.80,
+
+    # Pause / resume gesture (single-hand 3-finger extension hold)
+    "pause_hold": 0.40,
+    "pause_cooldown": 0.70,
+
+    # Handwriting mode
+    "handwriting_enabled": False,
+    "handwriting_toggle_threshold": 0.20,
+    "handwriting_toggle_hold": 0.25,
+    "handwriting_submit_hold": 0.18,
+    "handwriting_clear_hold": 0.18,
+    "handwriting_backspace_hold": 0.18,
+    "handwriting_backspace_threshold_scale": 1.0,
+    "handwriting_action_cooldown": 0.45,
+    "handwriting_panel_width_ratio": 0.55,
+    "handwriting_panel_height_ratio": 0.30,
+    "handwriting_panel_bottom_margin": 16,
+    "handwriting_stroke_thickness": 4,
+    "handwriting_pen_threshold_scale": 1.16,
+    "handwriting_jitter_threshold": 0.0015,
+    "handwriting_move_alpha_floor": 0.28,
+    "handwriting_move_alpha_ceiling": 0.86,
+    "handwriting_move_alpha_scale": 5.4,
+    "handwriting_pen_release_grace": 0.08,
+    "handwriting_window_width": 720,
+    "handwriting_window_height": 300,
+    "handwriting_window_x": 580,
+    "handwriting_window_y": 740,
+    "handwriting_window_topmost": True,
 
     # Scroll (V-pose orientation)
     "v_orientation_threshold": 0.01,
@@ -165,6 +210,191 @@ def load_config(config_path):
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.toml")
 CONFIG = load_config(CONFIG_PATH)
+
+
+def trigger_back_action():
+    action = str(CONFIG.get("back_action", "alt_left")).strip().lower()
+    if action == "x1":
+        try:
+            pyautogui.click(button="x1")
+            return
+        except Exception:
+            pass
+    # Fallback and default behavior for broad app support
+    pyautogui.hotkey("alt", "left")
+
+
+def hand_metrics(lms):
+    wrist = lms[HandLandmark.WRIST]
+    index_tip = lms[HandLandmark.INDEX_FINGER_TIP]
+    middle_tip = lms[HandLandmark.MIDDLE_FINGER_TIP]
+    ring_tip = lms[HandLandmark.RING_FINGER_TIP]
+    pinky_tip = lms[HandLandmark.PINKY_TIP]
+    thumb_tip = lms[HandLandmark.THUMB_TIP]
+    hand_size = lm_dist(wrist, middle_tip)
+    adaptive_thr = CONFIG["touch_threshold"] * hand_size
+    return {
+        "wrist": wrist,
+        "index_tip": index_tip,
+        "middle_tip": middle_tip,
+        "ring_tip": ring_tip,
+        "pinky_tip": pinky_tip,
+        "thumb_tip": thumb_tip,
+        "hand_size": hand_size,
+        "adaptive_thr": adaptive_thr,
+        "idx_thumb_d": lm_dist(index_tip, thumb_tip),
+        "mid_thumb_d": lm_dist(middle_tip, thumb_tip),
+        "ring_thumb_d": lm_dist(ring_tip, thumb_tip),
+        "pinky_thumb_d": lm_dist(pinky_tip, thumb_tip),
+    }
+
+
+def ensure_canvas(canvas, width, height):
+    if canvas is None or canvas.shape[1] != width or canvas.shape[0] != height:
+        return np.ones((height, width, 3), dtype=np.uint8) * 255
+    return canvas
+
+
+def render_handwriting_window(canvas, status_text="", cursor_point=None, pen_down=False):
+    header_h = 42
+    footer_h = 30
+    panel_h, panel_w = canvas.shape[:2]
+    out = np.ones((panel_h + header_h + footer_h, panel_w, 3), dtype=np.uint8) * 248
+
+    preview = canvas.copy()
+    if cursor_point is not None:
+        cx, cy = cursor_point
+        cx = int(np.clip(cx, 0, panel_w - 1))
+        cy = int(np.clip(cy, 0, panel_h - 1))
+        color = (20, 90, 235) if pen_down else (55, 175, 70)
+        cv2.circle(preview, (cx, cy), 8 if pen_down else 6, color, 2, cv2.LINE_AA)
+        cv2.line(preview, (cx - 10, cy), (cx + 10, cy), color, 1, cv2.LINE_AA)
+        cv2.line(preview, (cx, cy - 10), (cx, cy + 10), color, 1, cv2.LINE_AA)
+
+    out[header_h:header_h + panel_h] = preview
+    cv2.rectangle(out, (0, header_h), (panel_w - 1, header_h + panel_h - 1), (70, 210, 245), 2)
+
+    cv2.putText(
+        out,
+        "Floating Handwriting",
+        (10, 24),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.68,
+        (40, 40, 40),
+        2,
+    )
+    cv2.putText(
+        out,
+        "Cmd hand: ring+thumb toggle | index submit | middle clear | pinky backspace",
+        (10, panel_h + header_h + 22),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.45,
+        (60, 60, 60),
+        1,
+    )
+
+    if status_text:
+        cv2.putText(
+            out,
+            status_text[:72],
+            (260, 24),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.55,
+            (30, 120, 30),
+            2,
+        )
+
+    return out
+
+
+def show_handwriting_window(canvas, status_text="", cursor_point=None, pen_down=False):
+    window_name = "Handwriting Panel"
+    display_img = render_handwriting_window(canvas, status_text, cursor_point, pen_down)
+    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(
+        window_name,
+        int(CONFIG["handwriting_window_width"]),
+        int(CONFIG["handwriting_window_height"]),
+    )
+    cv2.moveWindow(
+        window_name,
+        int(CONFIG["handwriting_window_x"]),
+        int(CONFIG["handwriting_window_y"]),
+    )
+    cv2.imshow(window_name, display_img)
+
+    if bool(CONFIG.get("handwriting_window_topmost", True)):
+        try:
+            cv2.setWindowProperty(window_name, cv2.WND_PROP_TOPMOST, 1)
+        except Exception:
+            pass
+
+
+def ocr_canvas(canvas):
+    if pytesseract is None:
+        return "", "OCR unavailable (install pytesseract + Tesseract)"
+    try:
+        gray = cv2.cvtColor(canvas, cv2.COLOR_BGR2GRAY)
+        blur = cv2.GaussianBlur(gray, (3, 3), 0)
+
+        # Upscale strokes before OCR; this usually helps handwritten text.
+        scale = 2
+        up = cv2.resize(blur, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+
+        _, otsu = cv2.threshold(up, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        adaptive = cv2.adaptiveThreshold(
+            up,
+            255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY,
+            31,
+            9,
+        )
+
+        candidates = [
+            (otsu, 7),
+            (otsu, 8),
+            (adaptive, 7),
+            (adaptive, 8),
+        ]
+
+        best_text = ""
+        best_score = -1e9
+
+        for img, psm in candidates:
+            config = f"--oem 1 --psm {psm}"
+            data = pytesseract.image_to_data(img, config=config, output_type=pytesseract.Output.DICT)
+
+            words = []
+            confs = []
+            for raw_text, raw_conf in zip(data.get("text", []), data.get("conf", [])):
+                token = str(raw_text).strip()
+                if not token:
+                    continue
+                words.append(token)
+                try:
+                    c = float(raw_conf)
+                    if c >= 0:
+                        confs.append(c)
+                except Exception:
+                    pass
+
+            if not words:
+                continue
+
+            text = " ".join(words).strip()
+            mean_conf = float(np.mean(confs)) if confs else 0.0
+            length_bonus = min(len(text), 24) * 0.45
+            score = mean_conf + length_bonus
+
+            if score > best_score:
+                best_score = score
+                best_text = text
+
+        normalized = " ".join(best_text.strip().split())
+        return normalized, ""
+    except Exception as exc:
+        return "", f"OCR failed: {exc}"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # MediaPipe model download / setup
@@ -385,6 +615,18 @@ right_pinch_active = False
 right_pinch_start = 0.0
 right_clicked = False
 
+# Back gesture (thumb+pinky pinch-hold)
+back_pinch_active = False
+back_pinch_start = 0.0
+back_triggered = False
+back_cooldown_until = 0.0
+
+# Enter gesture (ring+thumb pinch-hold)
+enter_pinch_active = False
+enter_pinch_start = 0.0
+enter_cooldown_until = 0.0
+enter_status_until = 0.0
+
 # Middle-click (3-finger pinch)
 mid_click_cooldown = 0.0
 right_click_suppress_until = 0.0
@@ -395,15 +637,37 @@ v_scroll_lock_until = 0.0
 
 previous_y_scroll = None
 
-# Fist / pause
+# Pause / resume
 tracking_paused = False
-fist_prev = False              # debounce fist toggle
+pause_hold_active = False
+pause_hold_start = 0.0
+pause_cooldown_until = 0.0
 
 # Two-hand zoom
 zoom_active = False
 zoom_prev_mid_y = None
 zoom_last_action = 0.0
 zoom_last_msg = ""
+
+# Handwriting mode
+handwriting_mode = False
+handwriting_toggle_active = False
+handwriting_toggle_start = 0.0
+handwriting_toggle_latch = False
+handwriting_canvas = None
+handwriting_prev_point = None
+handwriting_cursor_point = None
+handwriting_pen_is_down = False
+handwriting_pen_release_time = None
+handwriting_status = ""
+handwriting_status_until = 0.0
+handwriting_submit_start = 0.0
+handwriting_submit_active = False
+handwriting_clear_start = 0.0
+handwriting_clear_active = False
+handwriting_backspace_start = 0.0
+handwriting_backspace_active = False
+handwriting_action_cooldown_until = 0.0
 
 # Stabilization after drag
 stabilize_until = 0.0
@@ -446,6 +710,210 @@ try:
             hand_size = lm_dist(wrist, middle_tip)
             adaptive_thr = CONFIG["touch_threshold"] * hand_size
             three_thr    = CONFIG["three_finger_threshold"] * hand_size
+
+            first_hand_data = hand_metrics(lms)
+            second_hand_data = hand_metrics(second_hand) if second_hand is not None else None
+            command_hand_data = None
+            write_hand_data = None
+            handwriting_feature_enabled = bool(CONFIG.get("handwriting_enabled", False))
+
+            if handwriting_feature_enabled and second_hand_data is not None:
+                # Use screen-space left hand for commands and right hand for writing.
+                if first_hand_data["wrist"].x <= second_hand_data["wrist"].x:
+                    command_hand_data = first_hand_data
+                    write_hand_data = second_hand_data
+                else:
+                    command_hand_data = second_hand_data
+                    write_hand_data = first_hand_data
+
+                toggle_raw = command_hand_data["ring_thumb_d"] < (
+                    CONFIG["handwriting_toggle_threshold"] * command_hand_data["hand_size"]
+                )
+                if toggle_raw and not handwriting_toggle_latch:
+                    if not handwriting_toggle_active:
+                        handwriting_toggle_active = True
+                        handwriting_toggle_start = now
+                    elif (now - handwriting_toggle_start) >= CONFIG["handwriting_toggle_hold"]:
+                        handwriting_mode = not handwriting_mode
+                        handwriting_toggle_latch = True
+                        handwriting_toggle_active = False
+                        handwriting_submit_active = False
+                        handwriting_clear_active = False
+                        handwriting_backspace_active = False
+                        handwriting_prev_point = None
+                        handwriting_cursor_point = None
+                        handwriting_pen_is_down = False
+                        handwriting_pen_release_time = None
+                        handwriting_status = "Handwriting ON" if handwriting_mode else "Handwriting OFF"
+                        handwriting_status_until = now + 1.2
+                elif not toggle_raw:
+                    handwriting_toggle_active = False
+                    handwriting_toggle_latch = False
+            else:
+                handwriting_toggle_active = False
+                handwriting_toggle_latch = False
+                if not handwriting_feature_enabled and handwriting_mode:
+                    handwriting_mode = False
+                    handwriting_prev_point = None
+                    handwriting_cursor_point = None
+                    handwriting_pen_is_down = False
+                    handwriting_pen_release_time = None
+                    handwriting_submit_active = False
+                    handwriting_clear_active = False
+                    handwriting_backspace_active = False
+
+            if handwriting_feature_enabled and handwriting_mode:
+                movement_thread.deactivate()
+                panel_w = int(CONFIG["handwriting_window_width"])
+                panel_h = max(160, int(CONFIG["handwriting_window_height"]) - 72)
+                handwriting_canvas = ensure_canvas(handwriting_canvas, panel_w, panel_h)
+
+                # Command-hand gestures: submit (index+thumb), clear (middle+thumb), backspace (pinky+thumb).
+                if command_hand_data is not None:
+                    cmd_idx_pinch = command_hand_data["idx_thumb_d"] < command_hand_data["adaptive_thr"]
+                    cmd_mid_pinch = command_hand_data["mid_thumb_d"] < command_hand_data["adaptive_thr"]
+                    cmd_pinky_pinch = command_hand_data["pinky_thumb_d"] < (
+                        command_hand_data["adaptive_thr"] * float(CONFIG["handwriting_backspace_threshold_scale"])
+                    )
+
+                    if now >= handwriting_action_cooldown_until:
+                        if cmd_idx_pinch:
+                            if not handwriting_submit_active:
+                                handwriting_submit_active = True
+                                handwriting_submit_start = now
+                            elif (now - handwriting_submit_start) >= CONFIG["handwriting_submit_hold"]:
+                                text, err = ocr_canvas(handwriting_canvas)
+                                if text:
+                                    pyautogui.write(text)
+                                    handwriting_status = f"Inserted: {text[:32]}"
+                                else:
+                                    handwriting_status = err or "No text recognized"
+                                handwriting_status_until = now + 1.8
+                                handwriting_action_cooldown_until = now + CONFIG["handwriting_action_cooldown"]
+                                handwriting_submit_active = False
+                        else:
+                            handwriting_submit_active = False
+
+                        if cmd_mid_pinch:
+                            if not handwriting_clear_active:
+                                handwriting_clear_active = True
+                                handwriting_clear_start = now
+                            elif (now - handwriting_clear_start) >= CONFIG["handwriting_clear_hold"]:
+                                handwriting_canvas[:] = 255
+                                handwriting_prev_point = None
+                                handwriting_status = "Canvas cleared"
+                                handwriting_status_until = now + 1.2
+                                handwriting_action_cooldown_until = now + CONFIG["handwriting_action_cooldown"]
+                                handwriting_clear_active = False
+                        else:
+                            handwriting_clear_active = False
+
+                        if cmd_pinky_pinch:
+                            if not handwriting_backspace_active:
+                                handwriting_backspace_active = True
+                                handwriting_backspace_start = now
+                            elif (now - handwriting_backspace_start) >= CONFIG["handwriting_backspace_hold"]:
+                                pyautogui.press("backspace")
+                                handwriting_status = "Backspace"
+                                handwriting_status_until = now + 1.0
+                                handwriting_action_cooldown_until = now + CONFIG["handwriting_action_cooldown"]
+                                handwriting_backspace_active = False
+                        else:
+                            handwriting_backspace_active = False
+                else:
+                    handwriting_submit_active = False
+                    handwriting_clear_active = False
+                    handwriting_backspace_active = False
+
+                # Write-hand drawing in panel.
+                draw_active = False
+                if write_hand_data is not None:
+                    tip = write_hand_data["index_tip"]
+                    raw_px = float(np.clip(tip.x, 0.0, 1.0) * (panel_w - 1))
+                    raw_py = float(np.clip(tip.y, 0.0, 1.0) * (panel_h - 1))
+
+                    if handwriting_cursor_point is None:
+                        sx, sy = raw_px, raw_py
+                    else:
+                        dx = raw_px - float(handwriting_cursor_point[0])
+                        dy = raw_py - float(handwriting_cursor_point[1])
+                        distance = np.hypot(dx, dy)
+                        panel_diag = max(1.0, np.hypot(panel_w, panel_h))
+                        move_ratio = distance / panel_diag
+
+                        if move_ratio <= float(CONFIG["handwriting_jitter_threshold"]):
+                            sx, sy = handwriting_cursor_point
+                        else:
+                            alpha = min(
+                                float(CONFIG["handwriting_move_alpha_ceiling"]),
+                                max(
+                                    float(CONFIG["handwriting_move_alpha_floor"]),
+                                    move_ratio * float(CONFIG["handwriting_move_alpha_scale"]),
+                                ),
+                            )
+                            sx = float(handwriting_cursor_point[0]) + (dx * alpha)
+                            sy = float(handwriting_cursor_point[1]) + (dy * alpha)
+                    handwriting_cursor_point = (int(sx), int(sy))
+
+                    px, py = handwriting_cursor_point
+                    pen_raw = write_hand_data["idx_thumb_d"] < (
+                        write_hand_data["adaptive_thr"] * float(CONFIG["handwriting_pen_threshold_scale"])
+                    )
+                    if pen_raw:
+                        handwriting_pen_is_down = True
+                        handwriting_pen_release_time = None
+                    elif handwriting_pen_is_down:
+                        if handwriting_pen_release_time is None:
+                            handwriting_pen_release_time = now
+                        if (now - handwriting_pen_release_time) > float(CONFIG["handwriting_pen_release_grace"]):
+                            handwriting_pen_is_down = False
+                            handwriting_pen_release_time = None
+
+                    draw_active = handwriting_pen_is_down
+                    if draw_active:
+                        point = (px, py)
+                        if handwriting_prev_point is None:
+                            handwriting_prev_point = point
+                        cv2.line(
+                            handwriting_canvas,
+                            handwriting_prev_point,
+                            point,
+                            (10, 10, 10),
+                            int(CONFIG["handwriting_stroke_thickness"]),
+                            cv2.LINE_AA,
+                        )
+                        handwriting_prev_point = point
+                else:
+                    handwriting_cursor_point = None
+                    handwriting_pen_is_down = False
+                    handwriting_pen_release_time = None
+
+                if not draw_active:
+                    handwriting_prev_point = None
+
+                cv2.putText(
+                    frame,
+                    "HANDWRITING MODE | Floating panel active (top-most)",
+                    (10, 26),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.48,
+                    (60, 220, 250),
+                    1,
+                )
+                if now < handwriting_status_until and handwriting_status:
+                    cv2.putText(frame, handwriting_status, (10, 48), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (120, 255, 120), 2)
+
+                show_handwriting_window(
+                    handwriting_canvas,
+                    handwriting_status if now < handwriting_status_until else "",
+                    handwriting_cursor_point,
+                    draw_active,
+                )
+
+                cv2.imshow("HandTrack", frame)
+                if cv2.waitKey(1) & 0xFF == 27:
+                    break
+                continue
 
             # ── Zoom mode: both index fingertips touching, then move up/down ─
             zoom_msg = ""
@@ -502,15 +970,17 @@ try:
             idx_thr_d  = lm_dist(index_tip, thumb_tip)
             mid_thr_d  = lm_dist(middle_tip, thumb_tip)
             ring_thr_d = lm_dist(ring_tip, thumb_tip)
+            pinky_thr_d = lm_dist(pinky_tip, thumb_tip)
 
             left_pinch_raw  = idx_thr_d < adaptive_thr
             mid_pinch_raw   = mid_thr_d < adaptive_thr and not left_pinch_raw
             three_pinch_raw = (idx_thr_d < three_thr and mid_thr_d < three_thr and ring_thr_d < three_thr)
+            back_pinch_raw = pinky_thr_d < (CONFIG["back_gesture_threshold"] * hand_size)
             v_pose_raw      = idx_ext and mid_ext and not ring_ext and not pinky_ext
-            fist_raw        = is_fist(lms, hand_size)
+            pause_raw       = idx_ext and mid_ext and ring_ext and not pinky_ext
 
-            if fist_raw:
-                frame_label = "fist"
+            if pause_raw:
+                frame_label = "pause_hold"
             elif three_pinch_raw:
                 frame_label = "three_pinch"
             elif left_pinch_raw:
@@ -524,15 +994,21 @@ try:
 
             gesture_buf.push(frame_label)
 
-            # ── Fist toggle (debounced) ────────────────────────────────────
-            fist_confirmed = gesture_buf.confirmed("fist")
-            if fist_confirmed and not fist_prev:
-                tracking_paused = not tracking_paused
-                print(f"[handTrack] tracking {'PAUSED' if tracking_paused else 'RESUMED'}")
-            fist_prev = fist_confirmed
+            # ── Pause toggle (deliberate 3-finger hold) ───────────────────
+            if pause_raw and now >= pause_cooldown_until:
+                if not pause_hold_active:
+                    pause_hold_active = True
+                    pause_hold_start = now
+                elif (now - pause_hold_start) >= CONFIG["pause_hold"]:
+                    tracking_paused = not tracking_paused
+                    pause_cooldown_until = now + CONFIG["pause_cooldown"]
+                    pause_hold_active = False
+                    print(f"[handTrack] tracking {'PAUSED' if tracking_paused else 'RESUMED'}")
+            else:
+                pause_hold_active = False
 
             if tracking_paused:
-                cv2.putText(frame, "PAUSED (fist to resume)", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                cv2.putText(frame, "PAUSED (3-finger hold to resume)", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 255), 2)
                 cv2.imshow("HandTrack", frame)
                 if cv2.waitKey(1) & 0xFF == 27:
                     break
@@ -671,6 +1147,21 @@ try:
                     right_clicked = True
                     previous_y_scroll = None
                     print("[handTrack] right-click (middle+thumb)")
+            # If user is finishing a drag selection and immediately does middle+thumb,
+            # release drag grace early so right-click can start without waiting.
+            elif mid_pinch_raw and left_is_dragging and left_release_time is not None and now >= right_click_suppress_until:
+                pyautogui.mouseUp()
+                left_is_dragging = False
+                movement_thread.dragging = False
+                left_pinch_active = False
+                left_pinch_start = 0.0
+                left_release_time = None
+                stabilize_until = now + CONFIG["stabilize_duration"]
+                stabilized_target_x, stabilized_target_y = target_x, target_y
+                right_pinch_active = True
+                right_pinch_start = now
+                right_clicked = False
+                previous_y_scroll = middle_tip.y
             else:
                 right_pinch_active = False
                 right_clicked = False
@@ -678,12 +1169,60 @@ try:
                 previous_y_scroll = None
                 v_scroll_lock_axis = None
 
+            # ── Back navigation: thumb+pinky pinch-hold ───────────────────
+            back_allowed = (not left_pinch_raw) and (not mid_pinch_raw) and (not three_pinch_raw) and (not v_pose_raw)
+            if back_pinch_raw and back_allowed and now >= back_cooldown_until:
+                if not back_pinch_active:
+                    back_pinch_active = True
+                    back_pinch_start = now
+                    back_triggered = False
+                elif (not back_triggered) and ((now - back_pinch_start) >= CONFIG["back_gesture_hold"]):
+                    try:
+                        trigger_back_action()
+                        print("[handTrack] back action")
+                    except Exception as exc:
+                        print(f"[handTrack] back action failed: {exc}")
+                    back_triggered = True
+                    back_cooldown_until = now + CONFIG["back_gesture_cooldown"]
+            else:
+                back_pinch_active = False
+                back_triggered = False
+
+            # ── Enter key: single-hand ring+thumb pinch-hold ─────────────
+            enter_pinch_raw = (
+                second_hand is None
+                and (ring_thr_d < (adaptive_thr * float(CONFIG["enter_gesture_threshold_scale"])))
+            )
+            enter_allowed = (
+                (not left_pinch_raw)
+                and (not mid_pinch_raw)
+                and (not three_pinch_raw)
+                and (not back_pinch_raw)
+                and (not v_pose_raw)
+                and (not fist_raw)
+            )
+
+            if enter_pinch_raw and enter_allowed and now >= enter_cooldown_until:
+                if not enter_pinch_active:
+                    enter_pinch_active = True
+                    enter_pinch_start = now
+                elif (now - enter_pinch_start) >= CONFIG["enter_gesture_hold"]:
+                    pyautogui.press("enter")
+                    enter_cooldown_until = now + CONFIG["enter_gesture_cooldown"]
+                    enter_status_until = now + 1.0
+                    enter_pinch_active = False
+                    print("[handTrack] enter key")
+            else:
+                enter_pinch_active = False
+
             # ── Debug overlay ──────────────────────────────────────────────
             dominant = gesture_buf.dominant()
             status = (
                 f"Gesture:{dominant}  "
                 f"Drag:{'Y' if left_is_dragging else 'N'}  "
-                f"Paused:{'Y' if tracking_paused else 'N'}"
+                f"Paused:{'Y' if tracking_paused else 'N'}  "
+                f"Back:{'Y' if back_pinch_active else 'N'}  "
+                f"Enter:{'Y' if enter_pinch_active else 'N'}"
             )
             v_acc = scroll_thread.v_accumulator
             h_acc = scroll_thread.h_accumulator
@@ -692,6 +1231,8 @@ try:
                         cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 0), 1)
             cv2.putText(frame, f"Axis lock:{v_scroll_lock_axis}  Zoom:2-hand", (10, 78),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (180, 180, 255), 1)
+            if now < enter_status_until:
+                cv2.putText(frame, "ENTER", (10, 102), cv2.FONT_HERSHEY_SIMPLEX, 0.62, (70, 220, 255), 2)
 
         else:
             # No hands → clean up state
@@ -706,10 +1247,19 @@ try:
                 right_pinch_active = False
                 right_clicked = False
                 right_pinch_start = 0.0
+            back_pinch_active = False
+            back_triggered = False
+            enter_pinch_active = False
             previous_y_scroll = None
             fist_prev = False
             gesture_buf.buf.clear()
             movement_thread.deactivate()
+
+        if not handwriting_mode:
+            try:
+                cv2.destroyWindow("Handwriting Panel")
+            except Exception:
+                pass
 
         try:
             cv2.imshow("HandTrack", frame)

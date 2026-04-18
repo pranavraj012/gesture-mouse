@@ -13,6 +13,7 @@ python hand_track.py
 - [ ] Drag: hold index+thumb pinch for drag, release to drop.
 - [ ] Right click: hold middle+thumb pinch long enough to right-click.
 - [ ] Middle click: three-finger pinch (index+middle+ring) triggers middle click only.
+- [ ] Back action: thumb+pinky pinch-hold triggers app/browser back navigation.
 
 ## Scrolling checks
 
@@ -21,7 +22,17 @@ python hand_track.py
 ## Zoom and state checks
 
 - [ ] Zoom mode: touch both index fingertips, move up for zoom in and down for zoom out.
-- [ ] Pause/resume: make fist to pause, fist again to resume tracking.
+- [ ] Pause/resume: hold index + middle + ring extended for about 0.4s to pause, repeat to resume tracking.
+- [ ] Enter key (normal mode): with handwriting mode OFF and one hand visible, ring+thumb pinch-hold (~0.22s) sends Enter.
+
+## Handwriting mode checks (optional: set handwriting_enabled = true)
+
+- [ ] Toggle handwriting mode: with two hands visible, ring+thumb hold on left-side hand turns mode on/off.
+- [ ] Draw: right-side index+thumb pinch draws in floating handwriting panel.
+- [ ] Clear: left-side middle+thumb hold clears panel.
+- [ ] Submit: left-side index+thumb hold inserts recognized text (if OCR installed).
+- [ ] Backspace: left-side pinky+thumb hold deletes one character.
+- [ ] Exit: left-side ring+thumb hold toggles handwriting mode off.
 
 ## Regression checks
 
