@@ -53,6 +53,10 @@ DEFAULT_CONFIG = {
 
     # Camera / mapping
     "inner_area_percent": 0.70,   # fraction of camera view mapped to full screen
+    "far_hand_gain_enabled": True,
+    "far_hand_reference_size": 0.22,  # wrist->middle_tip size considered normal distance
+    "far_hand_max_gain": 2.10,
+    "far_hand_gain_gamma": 1.35,
 
     # Pinch thresholds
     "touch_threshold": 0.19,      # normalized distance for pinch detection
@@ -136,8 +140,8 @@ DEFAULT_CONFIG = {
     "cursor_drag_alpha_scale": 3.0,
     "cursor_drag_sleep": 0.008,
     "cursor_move_alpha_floor": 0.12,
-    "cursor_move_alpha_ceiling": 0.62,
-    "cursor_move_alpha_scale": 2.6,
+    "cursor_move_alpha_ceiling": 0.72,
+    "cursor_move_alpha_scale": 3.2,
     "cursor_move_sleep": 0.006,
 
     # Gesture history buffer
@@ -1040,6 +1044,17 @@ try:
             mcp_y = int(ring_mcp.y * fh)
             mw, mh = calculate_margins(fw, fh, CONFIG["inner_area_percent"])
             target_x, target_y = convert_to_screen(mcp_x, mcp_y, fw, fh, mw, mh)
+
+            # Boost screen displacement when the hand appears smaller (farther from camera).
+            if CONFIG["far_hand_gain_enabled"]:
+                reference_size = max(1e-6, float(CONFIG["far_hand_reference_size"]))
+                normalized_size = max(1e-6, float(hand_size))
+                base_gain = reference_size / normalized_size
+                gain = min(float(CONFIG["far_hand_max_gain"]), max(1.0, base_gain ** float(CONFIG["far_hand_gain_gamma"])))
+                cx = screen_width * 0.5
+                cy = screen_height * 0.5
+                target_x = np.clip(cx + (target_x - cx) * gain, 0, screen_width)
+                target_y = np.clip(cy + (target_y - cy) * gain, 0, screen_height)
 
             if now < stabilize_until and stabilized_target_x is not None:
                 movement_thread.update_target(stabilized_target_x, stabilized_target_y)

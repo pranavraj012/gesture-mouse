@@ -7,7 +7,11 @@ height = 480
 fps = 60
 
 [mapping]
-inner_area_percent = 0.70
+inner_area_percent = 0.64
+far_hand_gain_enabled = true
+far_hand_reference_size = 0.24
+far_hand_max_gain = 2.35
+far_hand_gain_gamma = 1.50
 
 [gestures]
 touch_threshold = 0.19
@@ -30,7 +34,8 @@ pause_cooldown = 0.70
 pause_open_ratio = 1.12
 pause_closed_ratio = 1.03
 pause_thumb_open_ratio = 1.05
-handwriting_enabled = false
+[handwriting]
+handwriting_enabled = true
 handwriting_toggle_threshold = 0.20
 handwriting_toggle_hold = 0.25
 handwriting_submit_hold = 0.18
@@ -74,8 +79,8 @@ cursor_drag_alpha_ceiling = 0.85
 cursor_drag_alpha_scale = 3.0
 cursor_drag_sleep = 0.008
 cursor_move_alpha_floor = 0.12
-cursor_move_alpha_ceiling = 0.62
-cursor_move_alpha_scale = 2.6
+cursor_move_alpha_ceiling = 0.72
+cursor_move_alpha_scale = 3.2
 cursor_move_sleep = 0.006
 
 [history]
